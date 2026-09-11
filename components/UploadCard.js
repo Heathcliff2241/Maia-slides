@@ -1,6 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  FileImage,
+  Presentation,
+  FileDoc,
+  FilePdf,
+  FileText,
+  X,
+  CloudArrowUp,
+  Sparkle,
+  WarningCircle,
+} from "@phosphor-icons/react";
 
 export default function UploadCard({ onDeckReady }) {
   const [file, setFile] = useState(null);
@@ -41,14 +52,22 @@ export default function UploadCard({ onDeckReady }) {
     return `${(kb / 1024).toFixed(1)} MB`;
   }
 
-  function getFileIcon(f) {
-    if (!f) return "📄";
+  function renderFileIcon(f) {
+    if (!f) return <FileText size={26} weight="duotone" color="var(--rose)" />;
     const name = f.name.toLowerCase();
-    if (f.type.startsWith("image/") || name.match(/\.(png|jpe?g|webp|gif)$/)) return "🖼️";
-    if (name.endsWith(".pptx")) return "📊";
-    if (name.endsWith(".docx")) return "📝";
-    if (name.endsWith(".pdf")) return "📑";
-    return "📄";
+    if (f.type.startsWith("image/") || name.match(/\.(png|jpe?g|webp|gif)$/)) {
+      return <FileImage size={26} weight="duotone" color="var(--rose)" />;
+    }
+    if (name.endsWith(".pptx")) {
+      return <Presentation size={26} weight="duotone" color="var(--gold)" />;
+    }
+    if (name.endsWith(".docx")) {
+      return <FileDoc size={26} weight="duotone" color="var(--rose-deep)" />;
+    }
+    if (name.endsWith(".pdf")) {
+      return <FilePdf size={26} weight="duotone" color="var(--rose)" />;
+    }
+    return <FileText size={26} weight="duotone" color="var(--plum)" />;
   }
 
   async function handleGenerate() {
@@ -137,7 +156,7 @@ export default function UploadCard({ onDeckReady }) {
             {previewUrl ? (
               <img src={previewUrl} alt="Preview" className="file-image-thumb" />
             ) : (
-              <div className="file-icon-badge">{getFileIcon(file)}</div>
+              <div className="file-icon-badge">{renderFileIcon(file)}</div>
             )}
             <div className="file-details">
               <span className="file-name-text">{file.name}</span>
@@ -155,12 +174,12 @@ export default function UploadCard({ onDeckReady }) {
               }}
               title="Remove file"
             >
-              ✕
+              <X size={13} weight="bold" />
             </button>
           </div>
         ) : (
           <label htmlFor="pdf-input" className="drop-inner-label">
-            <span className="drop-icon">📑</span>
+            <CloudArrowUp size={36} weight="duotone" color="var(--rose)" style={{ marginBottom: 4 }} />
             <span className="drop-main-text">
               <strong>Click to upload</strong> or drag & drop files here
             </span>
@@ -202,20 +221,27 @@ export default function UploadCard({ onDeckReady }) {
               <span className="dot" />
               <span>Maia is reading your material & crafting cards with multiple choices…</span>
             </div>
-            <div className="loading-subtext">Gemini 2.0 Flash is analyzing text & diagrams (~10s)</div>
+            <div className="loading-subtext">Gemini 3.5 Flash-Lite is analyzing text & diagrams (~10s)</div>
           </div>
         ) : (
           <button
             className="btn btn-primary btn-generate"
             disabled={!file}
             onClick={handleGenerate}
+            type="button"
           >
-            Generate Study Deck ✨
+            <Sparkle size={16} weight="bold" style={{ marginRight: 6, verticalAlign: -2 }} />
+            Generate Study Deck
           </button>
         )}
       </div>
 
-      {error && <p className="error-note">⚠️ {error}</p>}
+      {error && (
+        <p className="error-note">
+          <WarningCircle size={15} weight="bold" style={{ marginRight: 6, verticalAlign: -2 }} />
+          {error}
+        </p>
+      )}
     </div>
   );
 }

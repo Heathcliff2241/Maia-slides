@@ -1,5 +1,15 @@
 "use client";
 
+import {
+  UploadSimple,
+  FileImage,
+  ListChecks,
+  Brain,
+  Target,
+  Sparkle,
+  ArrowRight,
+} from "@phosphor-icons/react";
+
 export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDecks }) {
   return (
     <section className="landing-wrap">
@@ -40,7 +50,8 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
             className="btn btn-primary nav-cta"
             type="button"
           >
-            Upload Material 🐰
+            <UploadSimple size={15} weight="bold" style={{ marginRight: 6 }} />
+            Upload Material
           </button>
         </nav>
       </header>
@@ -71,7 +82,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
               type="button"
             >
               <span>Upload Slides or Screenshot</span>
-              <span className="btn-arrow">➔</span>
+              <ArrowRight size={16} weight="bold" className="btn-arrow" />
             </button>
             <a href="#how-it-works" className="btn btn-hero-secondary">
               See How It Works
@@ -80,15 +91,15 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
 
           <div className="hero-trust">
             <span className="trust-item">
-              <span className="trust-icon">🖼️</span> PDFs, PPTX & Screenshots
+              <FileImage size={16} weight="duotone" className="trust-icon" /> PDFs, PPTX & Screenshots
             </span>
             <span className="trust-bullet">·</span>
             <span className="trust-item">
-              <span className="trust-icon">🔘</span> Multiple Choice & Flip
+              <ListChecks size={16} weight="duotone" className="trust-icon" /> Multiple Choice & Flip
             </span>
             <span className="trust-bullet">·</span>
             <span className="trust-item">
-              <span className="trust-icon">🧠</span> Spaced Repetition
+              <Brain size={16} weight="duotone" className="trust-icon" /> Spaced Repetition
             </span>
           </div>
         </div>
@@ -112,7 +123,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
 
             {/* Floating Badges */}
             <div className="floating-badge badge-top-right">
-              <span className="badge-emoji">🔘</span>
+              <ListChecks size={22} weight="duotone" color="var(--rose)" />
               <div className="badge-text">
                 <strong>Multiple Choice</strong>
                 <span>Interactive answer testing</span>
@@ -120,7 +131,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
             </div>
 
             <div className="floating-badge badge-bottom-left">
-              <span className="badge-emoji">🎯</span>
+              <Target size={22} weight="duotone" color="var(--good)" />
               <div className="badge-text">
                 <strong>Leitner Box System</strong>
                 <span>Automatic spaced review</span>
@@ -134,7 +145,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
       <div className="quote-banner card">
         <span className="punch" />
         <div className="quote-body">
-          <span className="quote-emoji">🌸</span>
+          <Sparkle size={26} weight="fill" color="var(--gold)" />
           <p className="quote-text">
             “Take a deep breath. You don’t have to master every slide in one
             night — just one card at a time. I’m cheering for you!”

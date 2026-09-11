@@ -1,6 +1,14 @@
 "use client";
 
 import { dueCount, deckProgressPercent } from "../lib/spacedRepetition";
+import {
+  Books,
+  ArrowUp,
+  CheckCircle,
+  Exam,
+  ArrowRight,
+  Trash,
+} from "@phosphor-icons/react";
 
 export default function DeckShelf({ decks, onStudy, onQuiz, onDelete, onScrollToUpload }) {
   if (!decks.length) {
@@ -8,7 +16,9 @@ export default function DeckShelf({ decks, onStudy, onQuiz, onDelete, onScrollTo
       <div className="card empty-shelf" id="decks-shelf">
         <span className="punch" />
         <div className="empty-content">
-          <div className="empty-emoji">📚</div>
+          <div className="empty-emoji">
+            <Books size={38} weight="duotone" color="var(--rose)" />
+          </div>
           <h3>Your shelf is waiting for your first deck</h3>
           <p>
             Upload any lecture slide deck or PDF above, and Maia will organize
@@ -20,7 +30,7 @@ export default function DeckShelf({ decks, onStudy, onQuiz, onDelete, onScrollTo
               className="btn btn-ghost empty-cta"
               type="button"
             >
-              Upload Slides Above ⬆
+              Upload Slides Above <ArrowUp size={14} weight="bold" style={{ marginLeft: 4 }} />
             </button>
           )}
         </div>
@@ -55,7 +65,10 @@ export default function DeckShelf({ decks, onStudy, onQuiz, onDelete, onScrollTo
                   {due > 0 ? (
                     <span className="due-pill">{due} due today</span>
                   ) : (
-                    <span className="all-reviewed-pill">✓ All caught up</span>
+                    <span className="all-reviewed-pill">
+                      <CheckCircle size={13} weight="fill" style={{ marginRight: 4, verticalAlign: -1 }} />
+                      All caught up
+                    </span>
                   )}
                 </div>
 
@@ -85,16 +98,20 @@ export default function DeckShelf({ decks, onStudy, onQuiz, onDelete, onScrollTo
                     className="btn btn-ghost"
                     onClick={() => onQuiz(deck)}
                     title="Take multiple-choice practice quiz"
+                    type="button"
                   >
-                    Quiz 📝
+                    <Exam size={15} weight="bold" style={{ marginRight: 5, verticalAlign: -2 }} />
+                    Quiz
                   </button>
                 )}
                 <button
                   className="btn btn-primary"
                   onClick={() => onStudy(deck)}
                   title="Practice active recall flashcards"
+                  type="button"
                 >
-                  Study Cards ➔
+                  Study Cards
+                  <ArrowRight size={14} weight="bold" style={{ marginLeft: 6, verticalAlign: -1 }} />
                 </button>
                 <button
                   className="btn btn-delete"
@@ -105,8 +122,9 @@ export default function DeckShelf({ decks, onStudy, onQuiz, onDelete, onScrollTo
                   }}
                   aria-label="Delete deck"
                   title="Delete deck"
+                  type="button"
                 >
-                  🗑
+                  <Trash size={16} weight="bold" />
                 </button>
               </div>
             </div>

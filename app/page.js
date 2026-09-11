@@ -7,6 +7,7 @@ import DeckShelf from "../components/DeckShelf";
 import StudyView from "../components/StudyView";
 import QuizView from "../components/QuizView";
 import { getDecks, addDeck, updateDeck, deleteDeck } from "../lib/storage";
+import { GraduationCap } from "@phosphor-icons/react";
 
 const GREETING_NAME = "Maia";
 
@@ -62,7 +63,10 @@ export default function Home() {
           <main className="wrap study-studio" id="study-studio">
             <div className="studio-divider">
               <span className="divider-line"></span>
-              <span className="divider-badge">STUDY STUDIO 🐰</span>
+              <span className="divider-badge">
+                <GraduationCap size={15} weight="bold" style={{ marginRight: 6, verticalAlign: -2 }} />
+                STUDY STUDIO
+              </span>
               <span className="divider-line"></span>
             </div>
 

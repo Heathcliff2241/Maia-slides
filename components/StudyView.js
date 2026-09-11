@@ -2,6 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { isDue, nextCardState } from "../lib/spacedRepetition";
+import {
+  CheckCircle,
+  Trophy,
+  ListChecks,
+  Cards,
+  ArrowLeft,
+  ArrowRight,
+  XCircle,
+} from "@phosphor-icons/react";
 
 export default function StudyView({ deck, onExit, onDeckUpdate }) {
   const initialQueue = useMemo(() => deck.cards.filter(isDue).map((c) => c.id), [deck.id]);
@@ -75,9 +84,12 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
     return (
       <div className="card session-done">
         <span className="punch" />
-        <div className="big">All caught up 🐰</div>
+        <div className="big">
+          <CheckCircle size={32} weight="fill" color="var(--good)" style={{ verticalAlign: -4, marginRight: 8 }} />
+          All caught up
+        </div>
         <p className="sub">Nothing is due for review in "{deck.title}" right now. Great job!</p>
-        <button className="btn btn-primary" onClick={onExit}>
+        <button className="btn btn-primary" onClick={onExit} type="button">
           Back to Decks
         </button>
       </div>
@@ -88,11 +100,14 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
     return (
       <div className="card session-done">
         <span className="punch" />
-        <div className="big">Splendid study session, Maia! 🎀</div>
+        <div className="big">
+          <Trophy size={32} weight="fill" color="var(--gold)" style={{ verticalAlign: -4, marginRight: 8 }} />
+          Splendid study session, Maia!
+        </div>
         <p className="sub">
           You mastered {reviewedCount} review{reviewedCount === 1 ? "" : "s"} in "{deck.title}".
         </p>
-        <button className="btn btn-primary" onClick={onExit}>
+        <button className="btn btn-primary" onClick={onExit} type="button">
           Back to Decks
         </button>
       </div>
@@ -103,8 +118,8 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
     <div className="study-container">
       {/* Top Header & Mode Toggle */}
       <div className="study-head">
-        <button className="back" onClick={onExit}>
-          ← Back to Decks
+        <button className="back" onClick={onExit} type="button">
+          <ArrowLeft size={14} weight="bold" /> Back to Decks
         </button>
 
         <div className="mode-switcher-pills">
@@ -117,7 +132,8 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
               setSelectedChoice(null);
             }}
           >
-            🔘 Multiple Choice
+            <ListChecks size={14} weight="bold" style={{ marginRight: 5, verticalAlign: -1 }} />
+            Multiple Choice
           </button>
           <button
             type="button"
@@ -127,7 +143,8 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
               setSelectedChoice(null);
             }}
           >
-            🎴 Flip Card
+            <Cards size={14} weight="bold" style={{ marginRight: 5, verticalAlign: -1 }} />
+            Flip Card
           </button>
         </div>
 
@@ -188,11 +205,13 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
               <div className="explanation-header">
                 {selectedChoice === correctIndex ? (
                   <span className="result-tag result-correct">
-                    ✓ Correct! Nicely done!
+                    <CheckCircle size={15} weight="fill" style={{ marginRight: 4, verticalAlign: -2 }} />
+                    Correct! Nicely done!
                   </span>
                 ) : (
                   <span className="result-tag result-wrong">
-                    ✕ Not quite — reviewing soon
+                    <XCircle size={15} weight="fill" style={{ marginRight: 4, verticalAlign: -2 }} />
+                    Not quite — reviewing soon
                   </span>
                 )}
               </div>
@@ -204,7 +223,8 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
                   onClick={handleChoiceNext}
                   type="button"
                 >
-                  Continue to Next Card ➔
+                  Continue to Next Card
+                  <ArrowRight size={15} weight="bold" style={{ marginLeft: 6, verticalAlign: -2 }} />
                 </button>
               </div>
             </div>
@@ -235,15 +255,15 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
 
           {flipped ? (
             <div className="review-actions">
-              <button className="again" onClick={() => advanceCard("again")}>
+              <button className="again" onClick={() => advanceCard("again")} type="button">
                 Again
                 <small>Review in this session</small>
               </button>
-              <button className="good" onClick={() => advanceCard("good")}>
+              <button className="good" onClick={() => advanceCard("good")} type="button">
                 Good
                 <small>Moves to next box</small>
               </button>
-              <button className="easy" onClick={() => advanceCard("easy")}>
+              <button className="easy" onClick={() => advanceCard("easy")} type="button">
                 Easy
                 <small>Mastered card</small>
               </button>
