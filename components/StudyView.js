@@ -6,7 +6,9 @@ import { isDue, nextCardState } from "../lib/spacedRepetition";
 export default function StudyView({ deck, onExit, onDeckUpdate }) {
   const initialQueue = useMemo(() => deck.cards.filter(isDue).map((c) => c.id), [deck.id]);
   const [queue, setQueue] = useState(initialQueue);
+  const [studyMode, setStudyMode] = useState("choice"); // "choice" | "flip"
   const [flipped, setFlipped] = useState(false);
+  const [selectedChoice, setSelectedChoice] = useState(null);
   const [reviewedCount, setReviewedCount] = useState(0);
 
   const totalToReview = initialQueue.length;
@@ -14,7 +16,30 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
   const currentCard = deck.cards.find((c) => c.id === currentId);
   const done = totalToReview === 0 || queue.length === 0;
 
-  function rate(rating) {
+  // Derive multiple choice options for current card (fallback for older decks)
+  const cardOptions = useMemo(() => {
+    if (!currentCard) return [];
+    if (Array.isArray(currentCard.options) && currentCard.options.length >= 2) {
+      return currentCard.options;
+    }
+    // Dynamic fallback distractors from other cards
+    const otherAnswers = deck.cards
+      .filter((c) => c.id !== currentCard.id)
+      .map((c) => c.back)
+      .slice(0, 3);
+    const combined = [currentCard.back, ...otherAnswers];
+    return combined.sort(() => 0.5 - Math.random());
+  }, [currentCard?.id]);
+
+  const correctIndex = useMemo(() => {
+    if (!currentCard) return 0;
+    if (typeof currentCard.correctIndex === "number" && currentCard.options) {
+      return currentCard.correctIndex;
+    }
+    return cardOptions.indexOf(currentCard.back);
+  }, [currentCard?.id, cardOptions]);
+
+  function advanceCard(rating) {
     if (!currentCard) return;
 
     const updatedCard = nextCardState(currentCard, rating);
@@ -25,13 +50,25 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
 
     setReviewedCount((n) => n + 1);
     setFlipped(false);
+    setSelectedChoice(null);
 
     setQueue((q) => {
       const rest = q.slice(1);
-      // "again" cards come back later in this same session
+      // "again" cards return later in the same session for reinforcement
       if (rating === "again") return [...rest, currentId];
       return rest;
     });
+  }
+
+  function handleChoiceClick(index) {
+    if (selectedChoice !== null) return;
+    setSelectedChoice(index);
+  }
+
+  function handleChoiceNext() {
+    if (selectedChoice === null) return;
+    const isCorrect = selectedChoice === correctIndex;
+    advanceCard(isCorrect ? "good" : "again");
   }
 
   if (totalToReview === 0) {
@@ -39,9 +76,9 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
       <div className="card session-done">
         <span className="punch" />
         <div className="big">All caught up 🐰</div>
-        <p className="sub">Nothing's due in "{deck.title}" right now. Come back later, or review anyway.</p>
+        <p className="sub">Nothing is due for review in "{deck.title}" right now. Great job!</p>
         <button className="btn btn-primary" onClick={onExit}>
-          Back to decks
+          Back to Decks
         </button>
       </div>
     );
@@ -51,26 +88,53 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
     return (
       <div className="card session-done">
         <span className="punch" />
-        <div className="big">Nice work, Maia 🎀</div>
-        <p className="sub">You reviewed {reviewedCount} card{reviewedCount === 1 ? "" : "s"} in "{deck.title}".</p>
+        <div className="big">Splendid study session, Maia! 🎀</div>
+        <p className="sub">
+          You mastered {reviewedCount} review{reviewedCount === 1 ? "" : "s"} in "{deck.title}".
+        </p>
         <button className="btn btn-primary" onClick={onExit}>
-          Back to decks
+          Back to Decks
         </button>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="study-container">
+      {/* Top Header & Mode Toggle */}
       <div className="study-head">
         <button className="back" onClick={onExit}>
-          ← Back
+          ← Back to Decks
         </button>
-        <span className="meta" style={{ fontSize: 12.5, color: "var(--plum-soft)" }}>
-          {deck.title}
-        </span>
+
+        <div className="mode-switcher-pills">
+          <button
+            type="button"
+            className={`mode-pill ${studyMode === "choice" ? "active" : ""}`}
+            onClick={() => {
+              setStudyMode("choice");
+              setFlipped(false);
+              setSelectedChoice(null);
+            }}
+          >
+            🔘 Multiple Choice
+          </button>
+          <button
+            type="button"
+            className={`mode-pill ${studyMode === "flip" ? "active" : ""}`}
+            onClick={() => {
+              setStudyMode("flip");
+              setSelectedChoice(null);
+            }}
+          >
+            🎴 Flip Card
+          </button>
+        </div>
+
+        <span className="study-deck-title">{deck.title}</span>
       </div>
 
+      {/* Progress Bar */}
       <div className="progress-bar">
         <div
           className="progress-fill"
@@ -78,42 +142,118 @@ export default function StudyView({ deck, onExit, onDeckUpdate }) {
         />
       </div>
 
-      <div className="flip-scene">
-        <div className={`flip-card ${flipped ? "flipped" : ""}`} onClick={() => setFlipped((f) => !f)}>
-          <div className="flip-inner">
-            <div className="face front">
-              <p>{currentCard.front}</p>
-              <span className="tap-hint">Tap to flip</span>
-            </div>
-            <div className="face back">
-              <p>{currentCard.back}</p>
-              <span className="tap-hint">Tap to flip back</span>
-            </div>
-          </div>
-        </div>
+      <div className="study-status-row">
+        <span className="study-status-pill">
+          Card {reviewedCount + 1} of {totalToReview} · Box {currentCard.box || 1}
+        </span>
+        <span className="study-status-due">{queue.length} left in session</span>
       </div>
 
-      {flipped ? (
-        <div className="review-actions">
-          <button className="again" onClick={() => rate("again")}>
-            Again
-            <small>review soon</small>
-          </button>
-          <button className="good" onClick={() => rate("good")}>
-            Good
-            <small>a few days</small>
-          </button>
-          <button className="easy" onClick={() => rate("easy")}>
-            Easy
-            <small>longer gap</small>
-          </button>
+      {/* 1. MULTIPLE CHOICE STUDY MODE */}
+      {studyMode === "choice" && (
+        <div className="card choice-study-card">
+          <span className="punch" />
+          <div className="choice-prompt-badge">QUESTION</div>
+          <h3 className="choice-card-question">{currentCard.front}</h3>
+
+          <div className="choice-options-list">
+            {cardOptions.map((opt, i) => {
+              let btnClass = "choice-option-btn";
+              if (selectedChoice !== null) {
+                if (i === correctIndex) {
+                  btnClass += " correct";
+                } else if (i === selectedChoice) {
+                  btnClass += " wrong";
+                }
+              }
+              return (
+                <button
+                  key={i}
+                  className={btnClass}
+                  disabled={selectedChoice !== null}
+                  onClick={() => handleChoiceClick(i)}
+                  type="button"
+                >
+                  <span className="option-letter">
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                  <span className="option-text">{opt}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedChoice !== null && (
+            <div className="choice-explanation-box">
+              <div className="explanation-header">
+                {selectedChoice === correctIndex ? (
+                  <span className="result-tag result-correct">
+                    ✓ Correct! Nicely done!
+                  </span>
+                ) : (
+                  <span className="result-tag result-wrong">
+                    ✕ Not quite — reviewing soon
+                  </span>
+                )}
+              </div>
+              <p className="explanation-text">{currentCard.back}</p>
+
+              <div className="choice-next-row">
+                <button
+                  className="btn btn-primary btn-choice-next"
+                  onClick={handleChoiceNext}
+                  type="button"
+                >
+                  Continue to Next Card ➔
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="review-actions">
-          <button onClick={() => setFlipped(true)} style={{ gridColumn: "1 / -1" }}>
-            Show answer
-          </button>
-        </div>
+      )}
+
+      {/* 2. CLASSIC FLIP STUDY MODE */}
+      {studyMode === "flip" && (
+        <>
+          <div className="flip-scene">
+            <div
+              className={`flip-card ${flipped ? "flipped" : ""}`}
+              onClick={() => setFlipped((f) => !f)}
+            >
+              <div className="flip-inner">
+                <div className="face front">
+                  <p>{currentCard.front}</p>
+                  <span className="tap-hint">Tap card to flip</span>
+                </div>
+                <div className="face back">
+                  <p>{currentCard.back}</p>
+                  <span className="tap-hint">Tap card to flip back</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {flipped ? (
+            <div className="review-actions">
+              <button className="again" onClick={() => advanceCard("again")}>
+                Again
+                <small>Review in this session</small>
+              </button>
+              <button className="good" onClick={() => advanceCard("good")}>
+                Good
+                <small>Moves to next box</small>
+              </button>
+              <button className="easy" onClick={() => advanceCard("easy")}>
+                Easy
+                <small>Mastered card</small>
+              </button>
+            </div>
+          ) : (
+            <div className="flip-prompt-hint">
+              Tap the card above to reveal the answer and rate your memory.
+            </div>
+          )}
+        </>
       )}
     </div>
   );

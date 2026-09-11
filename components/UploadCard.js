@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function UploadCard({ onDeckReady }) {
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [cardCount, setCardCount] = useState("15");
   const [focus, setFocus] = useState("");
@@ -11,12 +12,24 @@ export default function UploadCard({ onDeckReady }) {
   const [error, setError] = useState("");
   const inputRef = useRef(null);
 
-  function pickFile(f) {
-    if (!f) return;
-    if (f.type !== "application/pdf" && !f.name?.toLowerCase().endsWith(".pdf")) {
-      setError("Please choose a valid PDF file.");
+  useEffect(() => {
+    if (!file) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
       return;
     }
+
+    if (file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setPreviewUrl(null);
+    }
+  }, [file]);
+
+  function pickFile(f) {
+    if (!f) return;
     setError("");
     setFile(f);
   }
@@ -26,6 +39,16 @@ export default function UploadCard({ onDeckReady }) {
     const kb = bytes / 1024;
     if (kb < 1024) return `${kb.toFixed(1)} KB`;
     return `${(kb / 1024).toFixed(1)} MB`;
+  }
+
+  function getFileIcon(f) {
+    if (!f) return "📄";
+    const name = f.name.toLowerCase();
+    if (f.type.startsWith("image/") || name.match(/\.(png|jpe?g|webp|gif)$/)) return "🖼️";
+    if (name.endsWith(".pptx")) return "📊";
+    if (name.endsWith(".docx")) return "📝";
+    if (name.endsWith(".pdf")) return "📑";
+    return "📄";
   }
 
   async function handleGenerate() {
@@ -57,6 +80,8 @@ export default function UploadCard({ onDeckReady }) {
           id: `c${i}`,
           front: c.front,
           back: c.back,
+          options: c.options || [],
+          correctIndex: typeof c.correctIndex === "number" ? c.correctIndex : 0,
           box: 1,
           nextReview: now,
         })),
@@ -80,10 +105,10 @@ export default function UploadCard({ onDeckReady }) {
         <div>
           <h2>Create a New Study Deck</h2>
           <p className="hint">
-            Drop in your lecture slides, readings, or notes to instantly generate smart flashcards and a quiz.
+            Drop in lecture slides, textbook PDFs, PowerPoint, Word docs, or slide screenshots.
           </p>
         </div>
-        <span className="deck-type-pill">PDF & Slides</span>
+        <span className="deck-type-pill">PDF · PPTX · DOCX · Images</span>
       </div>
 
       <div
@@ -103,16 +128,22 @@ export default function UploadCard({ onDeckReady }) {
           ref={inputRef}
           id="pdf-input"
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,image/*,.docx,.pptx,.txt,.md"
           onChange={(e) => pickFile(e.target.files?.[0])}
         />
-        
+
         {file ? (
           <div className="file-preview-box">
-            <div className="file-icon-badge">📄</div>
+            {previewUrl ? (
+              <img src={previewUrl} alt="Preview" className="file-image-thumb" />
+            ) : (
+              <div className="file-icon-badge">{getFileIcon(file)}</div>
+            )}
             <div className="file-details">
               <span className="file-name-text">{file.name}</span>
-              <span className="file-size-text">{formatFileSize(file.size)} · Ready to process</span>
+              <span className="file-size-text">
+                {formatFileSize(file.size)} · Ready to process with Gemini
+              </span>
             </div>
             <button
               type="button"
@@ -131,9 +162,11 @@ export default function UploadCard({ onDeckReady }) {
           <label htmlFor="pdf-input" className="drop-inner-label">
             <span className="drop-icon">📑</span>
             <span className="drop-main-text">
-              <strong>Click to upload</strong> or drag & drop your slides PDF
+              <strong>Click to upload</strong> or drag & drop files here
             </span>
-            <span className="drop-subtext">Supports lecture presentations, textbook chapters, and study sheets</span>
+            <span className="drop-subtext">
+              Accepts PDF, PowerPoint (.pptx), Word (.docx), or Screenshots & Photos
+            </span>
           </label>
         )}
       </div>
@@ -167,9 +200,9 @@ export default function UploadCard({ onDeckReady }) {
               <span className="dot" />
               <span className="dot" />
               <span className="dot" />
-              <span>Maia is analyzing your slides and crafting cards & quiz…</span>
+              <span>Maia is reading your material & crafting cards with multiple choices…</span>
             </div>
-            <div className="loading-subtext">Usually takes ~10-15 seconds with Gemini AI</div>
+            <div className="loading-subtext">Gemini 2.0 Flash is analyzing text & diagrams (~10s)</div>
           </div>
         ) : (
           <button

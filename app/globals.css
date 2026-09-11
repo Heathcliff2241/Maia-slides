@@ -15,7 +15,7 @@
   --gold: #d49845;
   --line: #ecd6d2;
   --line-soft: #f4e5e2;
-  --good: #51854c;
+  --good: #467941;
   --good-bg: #eaf4e8;
   --shadow-sm: 0 2px 8px -2px rgba(50, 31, 41, 0.06);
   --shadow-md: 0 12px 30px -10px rgba(50, 31, 41, 0.1);
@@ -88,7 +88,7 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--line-soft);
@@ -738,16 +738,27 @@ button {
 .file-preview-box {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   background: #ffffff;
-  padding: 10px 16px;
-  border-radius: 10px;
-  border: 1px solid rgba(81, 133, 76, 0.25);
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(70, 121, 65, 0.25);
   text-align: left;
 }
 
+.file-image-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+
 .file-icon-badge {
-  font-size: 22px;
+  font-size: 26px;
+  flex-shrink: 0;
 }
 
 .file-details {
@@ -1079,14 +1090,20 @@ button {
 }
 
 /* ============================================================
-   STUDY VIEW (ACTIVE RECALL)
+   STUDY VIEW (MULTIPLE CHOICE & FLIP MODES)
    ============================================================ */
+
+.study-container {
+  width: 100%;
+}
 
 .study-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .study-head .back {
@@ -1105,12 +1122,51 @@ button {
   color: var(--rose-deep);
 }
 
+.study-deck-title {
+  font-size: 12.5px;
+  color: var(--plum-soft);
+  font-weight: 600;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Study Mode Toggle Switcher */
+.mode-switcher-pills {
+  display: inline-flex;
+  align-items: center;
+  background: var(--blush-soft);
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--blush);
+  gap: 2px;
+}
+
+.mode-pill {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--plum-soft);
+  transition: all 0.15s ease;
+}
+
+.mode-pill.active {
+  background: var(--paper);
+  color: var(--rose-deep);
+  box-shadow: 0 2px 6px rgba(50, 31, 41, 0.08);
+  font-weight: 700;
+}
+
 .progress-bar {
   height: 6px;
   border-radius: 999px;
   background: var(--blush-soft);
   overflow: hidden;
-  margin-bottom: 28px;
+  margin-bottom: 12px;
 }
 
 .progress-fill {
@@ -1119,6 +1175,157 @@ button {
   transition: width 0.25s ease;
 }
 
+.study-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  font-size: 12px;
+  color: var(--plum-soft);
+}
+
+.study-status-pill {
+  font-weight: 600;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+/* 1. Multiple Choice Flashcard UI */
+.choice-study-card {
+  padding: 32px 30px 32px 48px;
+  margin-bottom: 24px;
+}
+
+.choice-prompt-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--rose);
+  margin-bottom: 10px;
+}
+
+.choice-card-question {
+  font-family: "Fraunces", serif;
+  font-size: 21px;
+  line-height: 1.45;
+  color: var(--plum);
+  margin-bottom: 24px;
+}
+
+.choice-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.choice-option-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+  border: 1.5px solid var(--line);
+  background: var(--paper);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--plum);
+  transition: all 0.15s ease;
+  line-height: 1.45;
+  width: 100%;
+}
+
+.choice-option-btn:hover:not(:disabled) {
+  border-color: var(--rose);
+  background: var(--blush-soft);
+  transform: translateY(-1px);
+}
+
+.option-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--blush-soft);
+  color: var(--rose-deep);
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.choice-option-btn.correct {
+  border-color: var(--good);
+  background: var(--good-bg);
+  color: var(--good);
+  font-weight: 600;
+}
+
+.choice-option-btn.correct .option-letter {
+  background: var(--good);
+  color: #fff;
+}
+
+.choice-option-btn.wrong {
+  border-color: var(--rose);
+  background: var(--blush-soft);
+  color: var(--rose-deep);
+}
+
+.choice-option-btn.wrong .option-letter {
+  background: var(--rose);
+  color: #fff;
+}
+
+.choice-option-btn:disabled {
+  cursor: default;
+}
+
+.choice-explanation-box {
+  background: var(--paper-soft);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-top: 20px;
+  animation: fadeIn 0.25s ease;
+}
+
+.result-tag {
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.result-correct {
+  color: var(--good);
+}
+
+.result-wrong {
+  color: var(--rose-deep);
+}
+
+.explanation-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--plum);
+  margin: 0 0 16px;
+}
+
+.btn-choice-next {
+  width: 100%;
+  padding: 13px 20px !important;
+  font-size: 14.5px !important;
+  text-align: center;
+  justify-content: center;
+}
+
+/* 2. Flip Card UI */
 .flip-scene {
   perspective: 1400px;
   margin-bottom: 22px;
@@ -1190,6 +1397,13 @@ button {
   left: 0;
   right: 0;
   text-align: center;
+}
+
+.flip-prompt-hint {
+  text-align: center;
+  font-size: 13px;
+  color: var(--plum-soft);
+  margin-top: 12px;
 }
 
 .review-actions {
@@ -1370,6 +1584,17 @@ button {
    ANIMATIONS & LOADING
    ============================================================ */
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .dot {
   width: 7px;
   height: 7px;
@@ -1461,5 +1686,15 @@ button {
   .deck-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+
+  .study-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mode-switcher-pills {
+    width: 100%;
+    justify-content: center;
   }
 }

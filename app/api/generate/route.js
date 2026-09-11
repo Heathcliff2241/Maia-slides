@@ -1,10 +1,43 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import pdfParse from "pdf-parse";
+import mammoth from "mammoth";
+import JSZip from "jszip";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_CHARS = 18000; // keep prompt + cost reasonable
+const MAX_CHARS = 24000;
+
+function decodeXml(str) {
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
+async function extractTextFromPptx(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const slideFiles = Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)?.[0] || "0", 10);
+      const numB = parseInt(b.match(/\d+/)?.[0] || "0", 10);
+      return numA - numB;
+    });
+
+  let fullText = "";
+  for (let i = 0; i < slideFiles.length; i++) {
+    const xmlContent = await zip.files[slideFiles[i]].async("text");
+    const matches = [...xmlContent.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/gi)];
+    const slideText = matches.map((m) => decodeXml(m[1])).join(" ").trim();
+    if (slideText) {
+      fullText += `\n--- Slide ${i + 1} ---\n${slideText}\n`;
+    }
+  }
+  return fullText.trim();
+}
 
 export async function POST(req) {
   try {
@@ -14,7 +47,7 @@ export async function POST(req) {
     const focus = (formData.get("focus") || "").toString().trim();
 
     if (!file || typeof file === "string") {
-      return Response.json({ error: "No PDF file was uploaded." }, { status: 400 });
+      return Response.json({ error: "No file was uploaded." }, { status: 400 });
     }
 
     if (!process.env.GEMINI_API_KEY) {
@@ -24,28 +57,13 @@ export async function POST(req) {
       );
     }
 
+    const filename = file.name || "uploaded_file";
+    const ext = filename.split(".").pop()?.toLowerCase() || "";
+    const mime = file.type || "";
+    const isImage = mime.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif", "heic"].includes(ext);
+
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    let text = "";
-    try {
-      const parsed = await pdfParse(buffer);
-      text = (parsed.text || "").trim();
-    } catch (e) {
-      return Response.json(
-        { error: "Couldn't read that PDF. It may be scanned/image-based or corrupted." },
-        { status: 400 }
-      );
-    }
-
-    if (!text || text.length < 40) {
-      return Response.json(
-        { error: "That PDF didn't have extractable text (it may be a scan). Try a text-based PDF." },
-        { status: 400 }
-      );
-    }
-
-    const trimmedText = text.slice(0, MAX_CHARS);
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
@@ -57,34 +75,113 @@ export async function POST(req) {
 
     const focusLine = focus ? `Pay special attention to this topic/section: "${focus}".` : "";
 
-    const prompt = `You are helping a student build a study deck from lecture/textbook material.
+    const systemInstructions = `You are an expert study assistant helping a student build a high-retention study deck from lecture slides, screenshots, notes, or textbook materials.
 
-Read the source text below and produce:
-1. A short, plain "title" for this deck (max 6 words, based on the actual content).
-2. Exactly ${cardCount} flashcards testing the most important concepts, facts, definitions, or relationships. Each flashcard has a "front" (a question or term, concise) and "back" (a clear, complete-sentence answer, 1-3 sentences).
-3. 5 multiple-choice quiz questions drawn from the same material, each with exactly 4 "options" and a zero-indexed "correctIndex".
+Produce:
+1. A short, plain "title" for this deck (max 6 words, based on the actual material).
+2. Exactly ${cardCount} high-yield flashcards testing key definitions, mechanisms, concepts, formulas, and relationships.
+   For each flashcard, provide:
+   - "front": concise question or prompt.
+   - "back": clear, complete-sentence answer explanation (1-3 sentences).
+   - "options": exactly 4 distinct choices (one correct answer and three plausible distractors).
+   - "correctIndex": integer (0, 1, 2, or 3) indicating which option is correct.
+3. 5 multiple-choice quiz questions drawn from the same material, each with "question", 4 "options", and a zero-indexed "correctIndex".
 
 ${focusLine}
 
 Rules:
-- Base everything strictly on the provided text. Do not invent facts not supported by it.
-- Vary flashcard difficulty and phrasing; avoid near-duplicate cards.
-- Keep fronts short (a question or term), backs informative but not bloated.
-- Quiz distractors should be plausible, not silly.
+- Base everything strictly on the provided material. Do not hallucinate unsupported facts.
+- Front questions should be punchy and clear.
+- Distractors in "options" must be plausible and educational, not absurd.
+- Shuffle the correct option position across different cards so correctIndex varies between 0, 1, 2, and 3.
 
-Return ONLY valid JSON matching this exact shape, no markdown fences, no commentary:
+Return ONLY valid JSON matching this exact shape, no markdown fences, no extra commentary:
 {
   "title": "string",
-  "flashcards": [{ "front": "string", "back": "string" }],
-  "quiz": [{ "question": "string", "options": ["string","string","string","string"], "correctIndex": 0 }]
-}
+  "flashcards": [
+    {
+      "front": "string",
+      "back": "string",
+      "options": ["string", "string", "string", "string"],
+      "correctIndex": 0
+    }
+  ],
+  "quiz": [
+    {
+      "question": "string",
+      "options": ["string", "string", "string", "string"],
+      "correctIndex": 0
+    }
+  ]
+}`;
 
-SOURCE TEXT:
-"""
-${trimmedText}
-"""`;
+    let result;
 
-    const result = await model.generateContent(prompt);
+    if (isImage) {
+      // Multimodal processing directly with Gemini Vision
+      const imagePart = {
+        inlineData: {
+          data: buffer.toString("base64"),
+          mimeType: mime || "image/png",
+        },
+      };
+
+      const prompt = `${systemInstructions}\n\nAnalyze the provided image/screenshot carefully and generate the study deck from all visible slides, diagrams, and text.`;
+      result = await model.generateContent([prompt, imagePart]);
+    } else {
+      let text = "";
+
+      if (ext === "pptx" || mime.includes("presentation") || mime.includes("powerpoint")) {
+        try {
+          text = await extractTextFromPptx(buffer);
+        } catch (e) {
+          console.error("PPTX error:", e);
+          return Response.json(
+            { error: "Couldn't extract text from that PowerPoint presentation. Try saving as PDF or taking screenshots." },
+            { status: 400 }
+          );
+        }
+      } else if (ext === "docx" || mime.includes("wordprocessing")) {
+        try {
+          const res = await mammoth.extractRawText({ buffer });
+          text = (res.value || "").trim();
+        } catch (e) {
+          console.error("DOCX error:", e);
+          return Response.json(
+            { error: "Couldn't read that Word document. Try saving as PDF or plain text." },
+            { status: 400 }
+          );
+        }
+      } else if (ext === "txt" || ext === "md" || mime.startsWith("text/")) {
+        text = buffer.toString("utf-8").trim();
+      } else {
+        // Default to PDF parsing
+        try {
+          const parsed = await pdfParse(buffer);
+          text = (parsed.text || "").trim();
+        } catch (e) {
+          return Response.json(
+            { error: "Couldn't read that PDF. If it's a scanned PDF, try taking a screenshot or image instead!" },
+            { status: 400 }
+          );
+        }
+      }
+
+      if (!text || text.length < 30) {
+        return Response.json(
+          {
+            error:
+              "Could not find sufficient text in that file. If your document is an image or scan, upload it as a PNG/JPG screenshot!",
+          },
+          { status: 400 }
+        );
+      }
+
+      const trimmedText = text.slice(0, MAX_CHARS);
+      const prompt = `${systemInstructions}\n\nSOURCE TEXT:\n"""\n${trimmedText}\n"""`;
+      result = await model.generateContent(prompt);
+    }
+
     const raw = result.response.text();
 
     let parsed;
@@ -93,22 +190,42 @@ ${trimmedText}
     } catch {
       const match = raw.match(/\{[\s\S]*\}/);
       if (!match) {
-        return Response.json({ error: "Gemini returned an unexpected format. Try again." }, { status: 502 });
+        return Response.json({ error: "Gemini returned an unexpected format. Please try again." }, { status: 502 });
       }
       parsed = JSON.parse(match[0]);
     }
 
     if (!Array.isArray(parsed.flashcards) || parsed.flashcards.length === 0) {
-      return Response.json({ error: "No flashcards came back. Try a different PDF or fewer cards." }, { status: 502 });
+      return Response.json({ error: "No flashcards generated. Try uploading clearer slides or notes." }, { status: 502 });
     }
 
+    // Ensure all flashcards have options and correctIndex fallback if ever missing
+    const formattedCards = parsed.flashcards.map((c, i) => {
+      let options = Array.isArray(c.options) && c.options.length >= 2 ? c.options : null;
+      let correctIndex = typeof c.correctIndex === "number" ? c.correctIndex : 0;
+
+      if (!options) {
+        options = [c.back, "Not mentioned in source", "Opposite is true", "Inconclusive evidence"];
+        correctIndex = 0;
+      }
+
+      return {
+        front: c.front,
+        back: c.back,
+        options,
+        correctIndex,
+      };
+    });
+
+    const fallbackTitle = filename.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+
     return Response.json({
-      title: parsed.title || file.name?.replace(/\.pdf$/i, "") || "Untitled deck",
-      flashcards: parsed.flashcards,
+      title: parsed.title || fallbackTitle || "Study Deck",
+      flashcards: formattedCards,
       quiz: Array.isArray(parsed.quiz) ? parsed.quiz : [],
     });
   } catch (err) {
-    console.error(err);
+    console.error("API generate error:", err);
     return Response.json({ error: "Something went wrong generating the deck. Please try again." }, { status: 500 });
   }
 }

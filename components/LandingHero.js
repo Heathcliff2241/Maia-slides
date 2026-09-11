@@ -1,7 +1,5 @@
 "use client";
 
-import Image from "next/image";
-
 export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDecks }) {
   return (
     <section className="landing-wrap">
@@ -42,7 +40,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
             className="btn btn-primary nav-cta"
             type="button"
           >
-            Upload Slides 🐰
+            Upload Material 🐰
           </button>
         </nav>
       </header>
@@ -56,14 +54,14 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
           </div>
 
           <h1 className="hero-heading">
-            Turn Heavy Slides into{" "}
+            Turn Slides, PDFs & Screenshots into{" "}
             <span className="hero-accent">Bite-Sized Brilliance</span>.
           </h1>
 
           <p className="hero-subheading">
             Meet Maia — your personal AI study companion who transforms lecture
-            slides, syllabi, and textbook PDFs into active-recall flashcards and
-            interactive quizzes in seconds. Ace your exams without burning out.
+            slides, PowerPoint decks, Word docs, and screenshots into active-recall
+            flashcards and multiple-choice quizzes in seconds.
           </p>
 
           <div className="hero-actions">
@@ -72,7 +70,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
               className="btn btn-hero-primary"
               type="button"
             >
-              <span>Upload Your Slides</span>
+              <span>Upload Slides or Screenshot</span>
               <span className="btn-arrow">➔</span>
             </button>
             <a href="#how-it-works" className="btn btn-hero-secondary">
@@ -82,15 +80,15 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
 
           <div className="hero-trust">
             <span className="trust-item">
-              <span className="trust-icon">⚡</span> 10-Second Generation
+              <span className="trust-icon">🖼️</span> PDFs, PPTX & Screenshots
+            </span>
+            <span className="trust-bullet">·</span>
+            <span className="trust-item">
+              <span className="trust-icon">🔘</span> Multiple Choice & Flip
             </span>
             <span className="trust-bullet">·</span>
             <span className="trust-item">
               <span className="trust-icon">🧠</span> Spaced Repetition
-            </span>
-            <span className="trust-bullet">·</span>
-            <span className="trust-item">
-              <span className="trust-icon">🔒</span> Private in Browser
             </span>
           </div>
         </div>
@@ -114,10 +112,10 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
 
             {/* Floating Badges */}
             <div className="floating-badge badge-top-right">
-              <span className="badge-emoji">✨</span>
+              <span className="badge-emoji">🔘</span>
               <div className="badge-text">
-                <strong>Instant Cards</strong>
-                <span>Extracted key formulas</span>
+                <strong>Multiple Choice</strong>
+                <span>Interactive answer testing</span>
               </div>
             </div>
 
@@ -125,7 +123,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
               <span className="badge-emoji">🎯</span>
               <div className="badge-text">
                 <strong>Leitner Box System</strong>
-                <span>Active recall retention</span>
+                <span>Automatic spaced review</span>
               </div>
             </div>
           </div>
@@ -150,8 +148,8 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
         <span className="section-eyebrow">EFFORTLESS STUDYING</span>
         <h2 className="section-title">How Maia Powers Your Study Sessions</h2>
         <p className="section-desc">
-          Upload any lecture deck or reading, and let Gemini AI curate your
-          active study material.
+          Upload any lecture slides, documents, or screenshots, and let Gemini AI
+          curate your high-yield study material.
         </p>
       </div>
 
@@ -159,21 +157,21 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
         <div className="step-card card">
           <span className="punch" />
           <div className="step-number">01</div>
-          <h3>Upload Lecture PDFs</h3>
+          <h3>Slides, Docs & Screenshots</h3>
           <p>
-            Drop your slide presentations, lecture notes, or chapter handouts.
-            Maia handles multi-page documents seamlessly.
+            Upload PDF presentations, PowerPoint (.pptx), Word documents (.docx),
+            or lecture screenshots. Gemini reads text and diagrams seamlessly.
           </p>
-          <div className="step-tag">Fast & Simple</div>
+          <div className="step-tag">Multi-Format</div>
         </div>
 
         <div className="step-card card">
           <span className="punch" />
           <div className="step-number">02</div>
-          <h3>AI Flashcard Synthesis</h3>
+          <h3>Multiple Choice Flashcards</h3>
           <p>
-            Gemini AI pinpoints high-yield definitions, core mechanisms, and
-            exam-tested concepts into crisp question-and-answer pairs.
+            Each concept comes with active recall questions, 4 plausible
+            multiple-choice options, and clear explanations.
           </p>
           <div className="step-tag">Active Recall</div>
         </div>
@@ -181,12 +179,12 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
         <div className="step-card card">
           <span className="punch" />
           <div className="step-number">03</div>
-          <h3>Interactive Quizzes</h3>
+          <h3>Dual Study Modes</h3>
           <p>
-            Test yourself with multiple-choice questions with instant scoring
-            and deep explanations for both right and wrong answers.
+            Switch freely between quick 4-option Multiple Choice testing and
+            tactile 3D Flip Cards based on your study mood.
           </p>
-          <div className="step-tag">Exam Simulation</div>
+          <div className="step-tag">Flip or Choice</div>
         </div>
 
         <div className="step-card card">
@@ -194,8 +192,8 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
           <div className="step-number">04</div>
           <h3>Spaced Repetition Mastery</h3>
           <p>
-            Cards progress through Leitner boxes (1 to 5). Maia schedules
-            reviews right as you're about to forget them.
+            Cards progress through Leitner boxes (1 to 5). Correct answers
+            advance cards; missed questions automatically reappear for review.
           </p>
           <div className="step-tag">Long-Term Memory</div>
         </div>
