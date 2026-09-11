@@ -13,12 +13,19 @@ export default function UploadCard({ onDeckReady }) {
 
   function pickFile(f) {
     if (!f) return;
-    if (f.type !== "application/pdf") {
-      setError("Please choose a PDF file.");
+    if (f.type !== "application/pdf" && !f.name?.toLowerCase().endsWith(".pdf")) {
+      setError("Please choose a valid PDF file.");
       return;
     }
     setError("");
     setFile(f);
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes) return "";
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    return `${(kb / 1024).toFixed(1)} MB`;
   }
 
   async function handleGenerate() {
@@ -36,7 +43,7 @@ export default function UploadCard({ onDeckReady }) {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Something went wrong.");
+        setError(data.error || "Could not generate flashcards. Please try again.");
         setLoading(false);
         return;
       }
@@ -61,19 +68,26 @@ export default function UploadCard({ onDeckReady }) {
       setFocus("");
       setLoading(false);
     } catch (e) {
-      setError("Couldn't reach the server. Check your connection and try again.");
+      setError("Network or server issue. Check your connection or API key and try again.");
       setLoading(false);
     }
   }
 
   return (
-    <div className="card upload-card">
+    <div className="card upload-card" id="upload-section">
       <span className="punch" />
-      <h2>New deck</h2>
-      <p className="hint">Drop in a PDF — lecture slides, a chapter, notes — and get a deck to study.</p>
+      <div className="card-header-row">
+        <div>
+          <h2>Create a New Study Deck</h2>
+          <p className="hint">
+            Drop in your lecture slides, readings, or notes to instantly generate smart flashcards and a quiz.
+          </p>
+        </div>
+        <span className="deck-type-pill">PDF & Slides</span>
+      </div>
 
       <div
-        className={`drop ${dragging ? "active" : ""}`}
+        className={`drop ${dragging ? "active" : ""} ${file ? "has-file" : ""}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragging(true);
@@ -92,26 +106,54 @@ export default function UploadCard({ onDeckReady }) {
           accept="application/pdf"
           onChange={(e) => pickFile(e.target.files?.[0])}
         />
-        <label htmlFor="pdf-input">{file ? "Choose a different PDF" : "Choose a PDF, or drag it here"}</label>
-        {file && <div className="filename">{file.name}</div>}
+        
+        {file ? (
+          <div className="file-preview-box">
+            <div className="file-icon-badge">📄</div>
+            <div className="file-details">
+              <span className="file-name-text">{file.name}</span>
+              <span className="file-size-text">{formatFileSize(file.size)} · Ready to process</span>
+            </div>
+            <button
+              type="button"
+              className="file-remove-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFile(null);
+                if (inputRef.current) inputRef.current.value = "";
+              }}
+              title="Remove file"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <label htmlFor="pdf-input" className="drop-inner-label">
+            <span className="drop-icon">📑</span>
+            <span className="drop-main-text">
+              <strong>Click to upload</strong> or drag & drop your slides PDF
+            </span>
+            <span className="drop-subtext">Supports lecture presentations, textbook chapters, and study sheets</span>
+          </label>
+        )}
       </div>
 
       <div className="row">
         <div className="field">
-          <label htmlFor="cardCount">Cards to generate</label>
+          <label htmlFor="cardCount">Deck Size</label>
           <select id="cardCount" value={cardCount} onChange={(e) => setCardCount(e.target.value)}>
-            <option value="10">10</option>
-            <option value="15">15</option>
-            <option value="20">20</option>
-            <option value="30">30</option>
+            <option value="10">10 cards (Quick review)</option>
+            <option value="15">15 cards (Standard)</option>
+            <option value="20">20 cards (Comprehensive)</option>
+            <option value="30">30 cards (Deep dive)</option>
           </select>
         </div>
         <div className="field">
-          <label htmlFor="focus">Focus on (optional)</label>
+          <label htmlFor="focus">Topic Focus (Optional)</label>
           <input
             id="focus"
             type="text"
-            placeholder="e.g. chapter 3"
+            placeholder="e.g. Chapter 4, key formulas, dates, vocabulary..."
             value={focus}
             onChange={(e) => setFocus(e.target.value)}
           />
@@ -120,20 +162,27 @@ export default function UploadCard({ onDeckReady }) {
 
       <div className="upload-actions">
         {loading ? (
-          <div className="loading-line">
-            <span className="dot" />
-            <span className="dot" />
-            <span className="dot" />
-            Reading the PDF and writing your cards…
+          <div className="loading-container">
+            <div className="loading-line">
+              <span className="dot" />
+              <span className="dot" />
+              <span className="dot" />
+              <span>Maia is analyzing your slides and crafting cards & quiz…</span>
+            </div>
+            <div className="loading-subtext">Usually takes ~10-15 seconds with Gemini AI</div>
           </div>
         ) : (
-          <button className="btn btn-primary" disabled={!file} onClick={handleGenerate}>
-            Generate deck
+          <button
+            className="btn btn-primary btn-generate"
+            disabled={!file}
+            onClick={handleGenerate}
+          >
+            Generate Study Deck ✨
           </button>
         )}
       </div>
 
-      {error && <p className="error-note">{error}</p>}
+      {error && <p className="error-note">⚠️ {error}</p>}
     </div>
   );
 }

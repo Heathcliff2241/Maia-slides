@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import LandingHero from "../components/LandingHero";
 import UploadCard from "../components/UploadCard";
 import DeckShelf from "../components/DeckShelf";
 import StudyView from "../components/StudyView";
 import QuizView from "../components/QuizView";
 import { getDecks, addDeck, updateDeck, deleteDeck } from "../lib/storage";
 
-const GREETING_NAME = "Maia bunny";
+const GREETING_NAME = "Maia";
 
 export default function Home() {
   const [decks, setDecks] = useState([]);
@@ -23,6 +24,10 @@ export default function Home() {
   function handleDeckReady(deck) {
     const next = addDeck(deck);
     setDecks(next);
+    // Smooth scroll down to the newly added deck on shelf
+    setTimeout(() => {
+      document.getElementById("decks-shelf")?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
   }
 
   function handleDeckUpdate(updaterFn) {
@@ -36,56 +41,99 @@ export default function Home() {
     setDecks(next);
   }
 
+  function scrollToUpload() {
+    document.getElementById("upload-section")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function scrollToDecks() {
+    document.getElementById("decks-shelf")?.scrollIntoView({ behavior: "smooth" });
+  }
+
   return (
-    <main className="wrap">
+    <div className="page-container">
       {view === "home" && (
         <>
-          <div className="top">
-            <div>
-              <h1 className="greeting">
-                Study time, <span className="name">{GREETING_NAME}</span> 🐰
-              </h1>
-              <div className="tagline">Turn any PDF into flashcards and a quiz.</div>
-            </div>
-          </div>
-
-          <UploadCard onDeckReady={handleDeckReady} />
-
-          <DeckShelf
-            decks={decks}
-            onStudy={(deck) => {
-              setActiveDeckId(deck.id);
-              setView("study");
-            }}
-            onQuiz={(deck) => {
-              setActiveDeckId(deck.id);
-              setView("quiz");
-            }}
-            onDelete={handleDelete}
+          <LandingHero
+            deckCount={decks.length}
+            onScrollToUpload={scrollToUpload}
+            onScrollToDecks={scrollToDecks}
           />
+
+          <main className="wrap study-studio" id="study-studio">
+            <div className="studio-divider">
+              <span className="divider-line"></span>
+              <span className="divider-badge">STUDY STUDIO 🐰</span>
+              <span className="divider-line"></span>
+            </div>
+
+            <div className="top">
+              <div>
+                <h2 className="greeting">
+                  Ready to study, <span className="name">{GREETING_NAME}</span>?
+                </h2>
+                <div className="tagline">
+                  Generate new cards from slides or jump right into an existing deck.
+                </div>
+              </div>
+            </div>
+
+            <UploadCard onDeckReady={handleDeckReady} />
+
+            <DeckShelf
+              decks={decks}
+              onStudy={(deck) => {
+                setActiveDeckId(deck.id);
+                setView("study");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              onQuiz={(deck) => {
+                setActiveDeckId(deck.id);
+                setView("quiz");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              onDelete={handleDelete}
+              onScrollToUpload={scrollToUpload}
+            />
+          </main>
+
+          <footer className="page-footer">
+            <div className="footer-content">
+              <div className="footer-brand">
+                <img src="/bunny-study.png" alt="Maia" className="footer-avatar" />
+                <span>Maia Flashcards</span>
+              </div>
+              <p className="footer-note">
+                Made with love for Maia · Powered by Gemini AI & Leitner Spaced Repetition
+              </p>
+            </div>
+          </footer>
         </>
       )}
 
       {view === "study" && activeDeck && (
-        <StudyView
-          deck={activeDeck}
-          onExit={() => {
-            setView("home");
-            setActiveDeckId(null);
-          }}
-          onDeckUpdate={handleDeckUpdate}
-        />
+        <main className="wrap">
+          <StudyView
+            deck={activeDeck}
+            onExit={() => {
+              setView("home");
+              setActiveDeckId(null);
+            }}
+            onDeckUpdate={handleDeckUpdate}
+          />
+        </main>
       )}
 
       {view === "quiz" && activeDeck && (
-        <QuizView
-          deck={activeDeck}
-          onExit={() => {
-            setView("home");
-            setActiveDeckId(null);
-          }}
-        />
+        <main className="wrap">
+          <QuizView
+            deck={activeDeck}
+            onExit={() => {
+              setView("home");
+              setActiveDeckId(null);
+            }}
+          />
+        </main>
       )}
-    </main>
+    </div>
   );
 }
