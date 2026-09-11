@@ -65,10 +65,17 @@ export async function POST(req) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    let requestedModel = (process.env.GEMINI_MODEL || "gemini-2.0-flash").trim();
-    // Normalize and fallback if an invalid model name or space-separated name was provided
-    if (requestedModel.includes(" ") || !requestedModel.startsWith("gemini-")) {
-      requestedModel = "gemini-2.0-flash";
+    let rawModel = (process.env.GEMINI_MODEL || "gemini-3.5-flash-lite").trim().toLowerCase().replace(/\s+/g, "-");
+    if (!rawModel.startsWith("gemini-")) rawModel = `gemini-${rawModel}`;
+    
+    // Support 3.5 flash-lite, 3.5 flash, and 3.6 flash
+    let requestedModel = "gemini-3.5-flash-lite";
+    if (rawModel.includes("3.6")) {
+      requestedModel = "gemini-3.6-flash";
+    } else if (rawModel.includes("lite")) {
+      requestedModel = "gemini-3.5-flash-lite";
+    } else if (rawModel.includes("3.5") || rawModel.includes("flash")) {
+      requestedModel = "gemini-3.5-flash";
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
