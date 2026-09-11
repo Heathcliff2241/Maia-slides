@@ -65,18 +65,15 @@ export async function POST(req) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const rawModel = (process.env.GEMINI_MODEL || "gemini-2.5-flash-lite").trim();
+    const rawModel = (process.env.GEMINI_MODEL || "gemini-3.6-flash-lite").trim();
     // Map friendly names to real API model IDs
-    // Public "3.5 Flash" = API "gemini-2.5-flash"
-    // Public "3.5 Flash-Lite" = API "gemini-2.5-flash-lite"
+    // gemini-3.6-flash is the current recommended model
     const lc = rawModel.toLowerCase().replace(/\s+/g, "-");
     let requestedModel;
-    if (lc.includes("2.5-flash-lite") || lc.includes("3.5-flash-lite") || lc.includes("flash-lite")) {
-      requestedModel = "gemini-2.5-flash-lite";
-    } else if (lc.includes("2.5-flash") || lc.includes("3.5-flash") || (lc.includes("3.5") && lc.includes("flash"))) {
-      requestedModel = "gemini-2.5-flash";
+    if (lc.includes("flash-lite")) {
+      requestedModel = "gemini-3.6-flash-lite";
     } else if (lc.includes("flash")) {
-      requestedModel = "gemini-2.5-flash";
+      requestedModel = "gemini-3.6-flash";
     } else {
       requestedModel = rawModel.startsWith("gemini-") ? rawModel : `gemini-${rawModel}`;
     }
