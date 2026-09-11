@@ -65,9 +65,15 @@ export async function POST(req) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    let requestedModel = (process.env.GEMINI_MODEL || "gemini-2.0-flash").trim();
+    // Normalize and fallback if an invalid model name or space-separated name was provided
+    if (requestedModel.includes(" ") || !requestedModel.startsWith("gemini-")) {
+      requestedModel = "gemini-2.0-flash";
+    }
+
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+      model: requestedModel,
       generationConfig: {
         responseMimeType: "application/json",
       },
@@ -226,6 +232,7 @@ Return ONLY valid JSON matching this exact shape, no markdown fences, no extra c
     });
   } catch (err) {
     console.error("API generate error:", err);
-    return Response.json({ error: "Something went wrong generating the deck. Please try again." }, { status: 500 });
+    const errorMsg = err?.message || "Something went wrong generating the deck. Please try again.";
+    return Response.json({ error: errorMsg }, { status: 500 });
   }
 }
