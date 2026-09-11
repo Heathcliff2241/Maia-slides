@@ -107,7 +107,7 @@ export default function Home() {
                 <span>Maia Flashcards</span>
               </div>
               <p className="footer-note">
-                Made with love for Maia · Powered by Gemini AI & Leitner Spaced Repetition
+                Made with love for Maia · Powered by Leitner Spaced Repetition
               </p>
             </div>
           </footer>

@@ -161,7 +161,7 @@ export default function UploadCard({ onDeckReady }) {
             <div className="file-details">
               <span className="file-name-text">{file.name}</span>
               <span className="file-size-text">
-                {formatFileSize(file.size)} · Ready to process with Gemini
+                {formatFileSize(file.size)} · Ready to generate flashcards
               </span>
             </div>
             <button
@@ -221,7 +221,7 @@ export default function UploadCard({ onDeckReady }) {
               <span className="dot" />
               <span>Maia is reading your material & crafting cards with multiple choices…</span>
             </div>
-            <div className="loading-subtext">Gemini 3.5 Flash-Lite is analyzing text & diagrams (~10s)</div>
+            <div className="loading-subtext">Analyzing text & diagrams, this may take ~10 seconds…</div>
           </div>
         ) : (
           <button

@@ -159,7 +159,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
         <span className="section-eyebrow">EFFORTLESS STUDYING</span>
         <h2 className="section-title">How Maia Powers Your Study Sessions</h2>
         <p className="section-desc">
-          Upload any lecture slides, documents, or screenshots, and let Gemini AI
+          Upload any lecture slides, documents, or screenshots, and let Maia
           curate your high-yield study material.
         </p>
       </div>
@@ -171,7 +171,7 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
           <h3>Slides, Docs & Screenshots</h3>
           <p>
             Upload PDF presentations, PowerPoint (.pptx), Word documents (.docx),
-            or lecture screenshots. Gemini reads text and diagrams seamlessly.
+            or lecture screenshots. Maia reads text and diagrams seamlessly.
           </p>
           <div className="step-tag">Multi-Format</div>
         </div>

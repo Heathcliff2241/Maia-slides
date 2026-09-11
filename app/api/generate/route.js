@@ -65,17 +65,20 @@ export async function POST(req) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    let rawModel = (process.env.GEMINI_MODEL || "gemini-3.5-flash-lite").trim().toLowerCase().replace(/\s+/g, "-");
-    if (!rawModel.startsWith("gemini-")) rawModel = `gemini-${rawModel}`;
-    
-    // Support 3.5 flash-lite, 3.5 flash, and 3.6 flash
-    let requestedModel = "gemini-3.5-flash-lite";
-    if (rawModel.includes("3.6")) {
-      requestedModel = "gemini-3.6-flash";
-    } else if (rawModel.includes("lite")) {
-      requestedModel = "gemini-3.5-flash-lite";
-    } else if (rawModel.includes("3.5") || rawModel.includes("flash")) {
-      requestedModel = "gemini-3.5-flash";
+    const rawModel = (process.env.GEMINI_MODEL || "gemini-2.5-flash-lite").trim();
+    // Map friendly names to real API model IDs
+    // Public "3.5 Flash" = API "gemini-2.5-flash"
+    // Public "3.5 Flash-Lite" = API "gemini-2.5-flash-lite"
+    const lc = rawModel.toLowerCase().replace(/\s+/g, "-");
+    let requestedModel;
+    if (lc.includes("2.5-flash-lite") || lc.includes("3.5-flash-lite") || lc.includes("flash-lite")) {
+      requestedModel = "gemini-2.5-flash-lite";
+    } else if (lc.includes("2.5-flash") || lc.includes("3.5-flash") || (lc.includes("3.5") && lc.includes("flash"))) {
+      requestedModel = "gemini-2.5-flash";
+    } else if (lc.includes("flash")) {
+      requestedModel = "gemini-2.5-flash";
+    } else {
+      requestedModel = rawModel.startsWith("gemini-") ? rawModel : `gemini-${rawModel}`;
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -203,7 +206,7 @@ Return ONLY valid JSON matching this exact shape, no markdown fences, no extra c
     } catch {
       const match = raw.match(/\{[\s\S]*\}/);
       if (!match) {
-        return Response.json({ error: "Gemini returned an unexpected format. Please try again." }, { status: 502 });
+        return Response.json({ error: "The AI returned an unexpected format. Please try again." }, { status: 502 });
       }
       parsed = JSON.parse(match[0]);
     }
