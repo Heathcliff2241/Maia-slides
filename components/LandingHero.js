@@ -10,7 +10,12 @@ import {
   ArrowRight,
 } from "@phosphor-icons/react";
 
-export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDecks }) {
+export default function LandingHero({
+  deckCount,
+  onScrollToUpload,
+  onScrollToDecks,
+  onOpenApiDashboard,
+}) {
   return (
     <section className="landing-wrap">
       {/* Top Brand Navigation */}
@@ -45,6 +50,15 @@ export default function LandingHero({ deckCount, onScrollToUpload, onScrollToDec
               My Decks <span className="nav-count">{deckCount}</span>
             </button>
           )}
+          <button
+            onClick={onOpenApiDashboard}
+            className="nav-status-btn"
+            type="button"
+            title="View API Keys & Failover Health"
+          >
+            <span className="nav-live-dot" />
+            <span>API Status</span>
+          </button>
           <button
             onClick={onScrollToUpload}
             className="btn btn-primary nav-cta"

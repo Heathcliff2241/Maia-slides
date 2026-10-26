@@ -6,8 +6,9 @@ import UploadCard from "../components/UploadCard";
 import DeckShelf from "../components/DeckShelf";
 import StudyView from "../components/StudyView";
 import QuizView from "../components/QuizView";
+import ApiDashboardModal from "../components/ApiDashboardModal";
 import { getDecks, addDeck, updateDeck, deleteDeck } from "../lib/storage";
-import { GraduationCap } from "@phosphor-icons/react";
+import { GraduationCap, Lightning } from "@phosphor-icons/react";
 
 const GREETING_NAME = "Maia";
 
@@ -15,6 +16,7 @@ export default function Home() {
   const [decks, setDecks] = useState([]);
   const [view, setView] = useState("home"); // "home" | "study" | "quiz"
   const [activeDeckId, setActiveDeckId] = useState(null);
+  const [showApiDashboard, setShowApiDashboard] = useState(false);
 
   useEffect(() => {
     setDecks(getDecks());
@@ -58,6 +60,7 @@ export default function Home() {
             deckCount={decks.length}
             onScrollToUpload={scrollToUpload}
             onScrollToDecks={scrollToDecks}
+            onOpenApiDashboard={() => setShowApiDashboard(true)}
           />
 
           <main className="wrap study-studio" id="study-studio">
@@ -109,6 +112,17 @@ export default function Home() {
               <p className="footer-note">
                 Made with love for Maia · Powered by Leitner Spaced Repetition
               </p>
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowApiDashboard(true)}
+                  className="nav-status-btn"
+                  style={{ fontSize: 11.5, padding: "4px 10px" }}
+                >
+                  <Lightning size={13} weight="fill" color="var(--rose)" />
+                  API Keys & Failover Health
+                </button>
+              </div>
             </div>
           </footer>
         </>
@@ -138,6 +152,11 @@ export default function Home() {
           />
         </main>
       )}
+
+      <ApiDashboardModal
+        isOpen={showApiDashboard}
+        onClose={() => setShowApiDashboard(false)}
+      />
     </div>
   );
 }

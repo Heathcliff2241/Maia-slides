@@ -6,53 +6,76 @@ import JSZip from "jszip";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function getKeys() {
-  const raw = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
-  return raw
-    .split(",")
-    .map((k) => k.trim())
-    .filter(Boolean);
-}
-
-// In-memory cooldown tracking for keys that exhausted quota (per warm serverless instance)
-const keyCooldown = new Map();
+import { keyManager, getRawKeys } from "../../../lib/keyManager";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function classifyError(e) {
   const s = e?.status ?? e?.code ?? 0;
-  const msg = e?.message || "";
-  if (s === 429 || /429|quota|rate limit|resource has been exhausted/i.test(msg)) {
-    return "quota";
+  const msg =
+    (e?.message || "") +
+    " " +
+    JSON.stringify(e?.errorDetails || "") +
+    " " +
+    JSON.stringify(e?.violations || "");
+
+  // Daily per-model quota exhaustion (e.g. limit: 20 requests per day on gemini-3.6-flash)
+  if (
+    /requests per day limit exceeded|GenerateRequestsPerDayPerProjectPerModel|free_tier_requests/i.test(
+      msg
+    )
+  ) {
+    return "daily_model_quota";
   }
-  if (s === 503 || s === 500 || s === 504 || /503|504|high demand|overloaded|unavailable/i.test(msg)) {
+
+  // Short-term rate limit (RPM)
+  if (s === 429 || /429|quota|rate limit|resource has been exhausted/i.test(msg)) {
+    return "rate_limit";
+  }
+
+  // Busy or overloaded
+  if (
+    s === 503 ||
+    s === 500 ||
+    s === 504 ||
+    /503|504|high demand|overloaded|unavailable/i.test(msg)
+  ) {
     return "busy";
   }
+
   if (s === 400 && /api key/i.test(msg)) {
     return "badkey";
   }
+
   if (s === 401 || s === 403 || /API_KEY_INVALID|permission|forbidden|unauthorized/i.test(msg)) {
     return "badkey";
   }
+
   return "fatal";
 }
 
 async function generateWithFailover({ contents, config, models }) {
-  const keys = getKeys();
+  const keys = getRawKeys();
   if (!keys.length) {
     throw new Error(
       "Server is missing GEMINI_API_KEY or GEMINI_API_KEYS. Add it to your environment variables."
     );
   }
 
+  keyManager.recordRequestStart();
+
   // Randomize starting key index so concurrent requests load-balance across keys
   const start = Math.floor(Math.random() * keys.length);
   const orderedKeys = keys.map((_, i) => keys[(start + i) % keys.length]);
   let lastErr = null;
+  let failoverHappened = false;
 
   for (const key of orderedKeys) {
-    const cdUntil = keyCooldown.get(key) || 0;
-    if (cdUntil > Date.now()) continue;
+    if (keyManager.isKeyOnCooldown(key)) {
+      continue;
+    }
+
+    keyManager.recordAttempt(key);
 
     const ai = new GoogleGenAI({
       apiKey: key,
@@ -64,33 +87,69 @@ async function generateWithFailover({ contents, config, models }) {
     });
 
     for (const modelName of models) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const response = await ai.models.generateContent({
-            model: modelName,
-            contents,
-            config,
-          });
-          return response;
-        } catch (e) {
-          lastErr = e;
-          const kind = classifyError(e);
-          if (kind === "fatal") throw e; // Fatal error (e.g. invalid request structure)
-          if (kind === "quota" || kind === "badkey") {
-            keyCooldown.set(key, Date.now() + 60_000); // Cooldown for 1 minute
-            break; // Switch to next key
-          }
-          // Busy / 503 / 500: short exponential backoff before retrying attempt or fallback model
-          await sleep(700 * 2 ** attempt + Math.random() * 300);
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents,
+          config,
+        });
+
+        // Record success with failover flag
+        keyManager.recordSuccess(key, {
+          isFailover: failoverHappened,
+          model: modelName,
+        });
+
+        return response;
+      } catch (e) {
+        lastErr = e;
+        const kind = classifyError(e);
+
+        if (kind === "fatal") {
+          keyManager.recordRequestFailure(e);
+          throw e;
         }
+
+        if (kind === "daily_model_quota") {
+          // This specific model hit its daily free-tier limit (e.g. 20 RPD on gemini-3.6-flash).
+          // Do NOT give up on this key! Immediately try the next candidate model with its own quota bucket.
+          failoverHappened = true;
+          continue; // Immediately try next model (0ms wait)
+        }
+
+        if (kind === "badkey") {
+          keyManager.recordCooldown(key, "Invalid API key or authentication failure", 300000);
+          failoverHappened = true;
+          break; // Switch to next key
+        }
+
+        if (kind === "rate_limit") {
+          // 429 short-term rate limit (RPM) on this key: cool down for 20s and switch key
+          keyManager.recordCooldown(key, "Rate limit reached (429)", 20000);
+          failoverHappened = true;
+          break; // Switch to next key
+        }
+
+        if (kind === "busy") {
+          // 503 / 500 busy: fast retry with fallback model
+          failoverHappened = true;
+          await sleep(250 + Math.random() * 150);
+          continue; // Try next model
+        }
+
+        failoverHappened = true;
       }
     }
+    failoverHappened = true;
   }
 
-  throw (
+  const finalError =
     lastErr ||
-    new Error("All Gemini API keys or models are currently busy. Please try again shortly.")
-  );
+    new Error(
+      "All Gemini API keys or models are currently busy or on cooldown. Please try again shortly."
+    );
+  keyManager.recordRequestFailure(finalError);
+  throw finalError;
 }
 
 function decodeXml(str) {
@@ -213,7 +272,7 @@ export async function POST(req) {
       return Response.json({ error: "No file was uploaded." }, { status: 400 });
     }
 
-    const keys = getKeys();
+    const keys = getRawKeys();
     if (!keys.length) {
       return Response.json(
         {
@@ -235,11 +294,14 @@ export async function POST(req) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Primary model and fallback cascade
+    // If GEMINI_MODEL is set to gemini-3.6-flash (which has a strict 20 RPD cap on free tier),
+    // prioritize gemini-3.8-flash and gemini-3.1-flash-lite so requests don't hit the daily quota wall.
     const rawModel = (process.env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const candidateModels = [
-      rawModel,
+      rawModel === "gemini-3.6-flash" ? "gemini-3.8-flash" : rawModel,
       "gemini-3.8-flash",
       "gemini-3.1-flash-lite",
+      "gemini-3.6-flash",
     ].filter((m, i, a) => m && a.indexOf(m) === i);
 
     const focusLine = focus ? `Pay special attention to this topic or section: "${focus}".` : "";
