@@ -70,17 +70,73 @@ export default function UploadCard({ onDeckReady }) {
     return <FileText size={26} weight="duotone" color="var(--plum)" />;
   }
 
+  function downscaleImageIfNeeded(imageFile, maxDimension = 1280) {
+    if (!imageFile || !imageFile.type?.startsWith("image/")) {
+      return Promise.resolve(imageFile);
+    }
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(imageFile);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width <= maxDimension && height <= maxDimension) {
+          resolve(imageFile);
+          return;
+        }
+        if (width > height) {
+          if (width > maxDimension) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(imageFile);
+              return;
+            }
+            const safeName = imageFile.name.replace(/\.[^.]+$/, "") + ".jpg";
+            const resized = new File([blob], safeName, {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            });
+            resolve(resized);
+          },
+          "image/jpeg",
+          0.85
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(imageFile);
+      };
+      img.src = url;
+    });
+  }
+
   async function handleGenerate() {
     if (!file) return;
     setLoading(true);
     setError("");
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("cardCount", cardCount);
-    formData.append("focus", focus);
-
     try {
+      const fileToSend = await downscaleImageIfNeeded(file, 1280);
+      const formData = new FormData();
+      formData.append("file", fileToSend);
+      formData.append("cardCount", cardCount);
+      formData.append("focus", focus);
+
       const res = await fetch("/api/generate", { method: "POST", body: formData });
       const data = await res.json();
 
@@ -91,20 +147,32 @@ export default function UploadCard({ onDeckReady }) {
       }
 
       const now = Date.now();
+      const formattedCards = (data.flashcards || []).map((c, i) => ({
+        id: `c${i}`,
+        front: c.front,
+        back: c.back,
+        options: c.options || [],
+        correctIndex: typeof c.correctIndex === "number" ? c.correctIndex : 0,
+        box: 1,
+        nextReview: now,
+      }));
+
+      // If data.quiz is provided, use it; otherwise synthesize from the first 5 cards
+      const quizSource =
+        Array.isArray(data.quiz) && data.quiz.length > 0
+          ? data.quiz
+          : formattedCards.slice(0, 5).map((c) => ({
+              question: c.front,
+              options: c.options,
+              correctIndex: c.correctIndex,
+            }));
+
       const deck = {
         id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
         title: data.title,
         createdAt: now,
-        cards: data.flashcards.map((c, i) => ({
-          id: `c${i}`,
-          front: c.front,
-          back: c.back,
-          options: c.options || [],
-          correctIndex: typeof c.correctIndex === "number" ? c.correctIndex : 0,
-          box: 1,
-          nextReview: now,
-        })),
-        quiz: (data.quiz || []).map((q, i) => ({ id: `q${i}`, ...q })),
+        cards: formattedCards,
+        quiz: quizSource.map((q, i) => ({ id: `q${i}`, ...q })),
       };
 
       onDeckReady(deck);

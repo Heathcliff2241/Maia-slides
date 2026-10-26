@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export default function QuizView({ deck, onExit }) {
   const [index, setIndex] = useState(0);
@@ -8,8 +8,19 @@ export default function QuizView({ deck, onExit }) {
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
 
-  const questions = deck.quiz;
-  const q = questions[index];
+  const questions = useMemo(() => {
+    if (Array.isArray(deck.quiz) && deck.quiz.length > 0) {
+      return deck.quiz;
+    }
+    return (deck.cards || []).slice(0, 5).map((c, i) => ({
+      id: `q${i}`,
+      question: c.front,
+      options: c.options || [c.back],
+      correctIndex: typeof c.correctIndex === "number" ? c.correctIndex : 0,
+    }));
+  }, [deck]);
+
+  const q = questions[index] || { question: "", options: [], correctIndex: 0 };
 
   function choose(i) {
     if (selected !== null) return;

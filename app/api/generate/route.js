@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 import JSZip from "jszip";
@@ -6,7 +6,92 @@ import JSZip from "jszip";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_CHARS = 24000;
+function getKeys() {
+  const raw = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
+  return raw
+    .split(",")
+    .map((k) => k.trim())
+    .filter(Boolean);
+}
+
+// In-memory cooldown tracking for keys that exhausted quota (per warm serverless instance)
+const keyCooldown = new Map();
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function classifyError(e) {
+  const s = e?.status ?? e?.code ?? 0;
+  const msg = e?.message || "";
+  if (s === 429 || /429|quota|rate limit|resource has been exhausted/i.test(msg)) {
+    return "quota";
+  }
+  if (s === 503 || s === 500 || s === 504 || /503|504|high demand|overloaded|unavailable/i.test(msg)) {
+    return "busy";
+  }
+  if (s === 400 && /api key/i.test(msg)) {
+    return "badkey";
+  }
+  if (s === 401 || s === 403 || /API_KEY_INVALID|permission|forbidden|unauthorized/i.test(msg)) {
+    return "badkey";
+  }
+  return "fatal";
+}
+
+async function generateWithFailover({ contents, config, models }) {
+  const keys = getKeys();
+  if (!keys.length) {
+    throw new Error(
+      "Server is missing GEMINI_API_KEY or GEMINI_API_KEYS. Add it to your environment variables."
+    );
+  }
+
+  // Randomize starting key index so concurrent requests load-balance across keys
+  const start = Math.floor(Math.random() * keys.length);
+  const orderedKeys = keys.map((_, i) => keys[(start + i) % keys.length]);
+  let lastErr = null;
+
+  for (const key of orderedKeys) {
+    const cdUntil = keyCooldown.get(key) || 0;
+    if (cdUntil > Date.now()) continue;
+
+    const ai = new GoogleGenAI({
+      apiKey: key,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
+
+    for (const modelName of models) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents,
+            config,
+          });
+          return response;
+        } catch (e) {
+          lastErr = e;
+          const kind = classifyError(e);
+          if (kind === "fatal") throw e; // Fatal error (e.g. invalid request structure)
+          if (kind === "quota" || kind === "badkey") {
+            keyCooldown.set(key, Date.now() + 60_000); // Cooldown for 1 minute
+            break; // Switch to next key
+          }
+          // Busy / 503 / 500: short exponential backoff before retrying attempt or fallback model
+          await sleep(700 * 2 ** attempt + Math.random() * 300);
+        }
+      }
+    }
+  }
+
+  throw (
+    lastErr ||
+    new Error("All Gemini API keys or models are currently busy. Please try again shortly.")
+  );
+}
 
 function decodeXml(str) {
   return str
@@ -39,6 +124,84 @@ async function extractTextFromPptx(buffer) {
   return fullText.trim();
 }
 
+function cleanExtractedText(rawText) {
+  if (!rawText) return "";
+  const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+  // Identify lines that repeat 4+ times (headers, footers, course numbers)
+  const lineCounts = new Map();
+  for (const line of lines) {
+    if (line.length < 90) {
+      lineCounts.set(line, (lineCounts.get(line) || 0) + 1);
+    }
+  }
+
+  const filtered = lines.filter((line) => {
+    if (lineCounts.get(line) >= 4) return false;
+    // Drop standalone page or slide numbers
+    if (/^(page\s+\d+(\s+of\s+\d+)?|\d+(\/\d+)?|slide\s+\d+)$/i.test(line)) return false;
+    return true;
+  });
+
+  return filtered
+    .join("\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function sampleDocumentText(text, targetChars) {
+  if (!text || text.length <= targetChars) return text;
+
+  // Split into logical sections
+  const sections = text.split(/\n\s*\n/).filter((s) => s.trim().length > 15);
+  if (sections.length <= 4) {
+    const third = Math.floor(targetChars / 3);
+    const midStart = Math.floor(text.length / 2 - third / 2);
+    return `${text.slice(0, third)}\n\n[...]\n\n${text.slice(midStart, midStart + third)}\n\n[...]\n\n${text.slice(-third)}`;
+  }
+
+  // Sample evenly throughout the entire presentation or document
+  const totalSections = sections.length;
+  const avgSectionLen = text.length / totalSections;
+  const sectionsNeeded = Math.min(totalSections, Math.max(6, Math.floor(targetChars / avgSectionLen)));
+  const step = totalSections / sectionsNeeded;
+
+  const sampled = [];
+  let currentLen = 0;
+  for (let i = 0; i < sectionsNeeded && currentLen < targetChars; i++) {
+    const idx = Math.min(Math.floor(i * step), totalSections - 1);
+    const sec = sections[idx];
+    sampled.push(sec);
+    currentLen += sec.length + 4;
+  }
+  return sampled.join("\n\n---\n\n");
+}
+
+function shuffleOptions(opts) {
+  // opts[0] is the correct answer by contract from the model
+  const safeOpts =
+    Array.isArray(opts) && opts.length >= 2
+      ? [...opts]
+      : [opts?.[0] || "Correct Answer", "Option B", "Option C", "Option D"];
+
+  while (safeOpts.length < 4) {
+    safeOpts.push(`Distractor ${safeOpts.length + 1}`);
+  }
+
+  const idx = [0, 1, 2, 3].slice(0, safeOpts.length);
+  // Fisher-Yates shuffle
+  for (let i = idx.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+
+  return {
+    options: idx.map((i) => safeOpts[i]),
+    correctIndex: idx.indexOf(0),
+  };
+}
+
 export async function POST(req) {
   try {
     const formData = await req.formData();
@@ -50,9 +213,13 @@ export async function POST(req) {
       return Response.json({ error: "No file was uploaded." }, { status: 400 });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    const keys = getKeys();
+    if (!keys.length) {
       return Response.json(
-        { error: "Server is missing GEMINI_API_KEY. Add it to your environment variables." },
+        {
+          error:
+            "Server is missing GEMINI_API_KEY or GEMINI_API_KEYS. Please add it to your environment variables.",
+        },
         { status: 500 }
       );
     }
@@ -60,151 +227,163 @@ export async function POST(req) {
     const filename = file.name || "uploaded_file";
     const ext = filename.split(".").pop()?.toLowerCase() || "";
     const mime = file.type || "";
-    const isImage = mime.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif", "heic"].includes(ext);
+    const isImage =
+      mime.startsWith("image/") ||
+      ["png", "jpg", "jpeg", "webp", "gif", "heic"].includes(ext);
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Primary model and fallback cascade
     const rawModel = (process.env.GEMINI_MODEL || "gemini-3.8-flash").trim();
-    const lc = rawModel.toLowerCase().replace(/\s+/g, "-");
-    let requestedModel = "gemini-3.8-flash";
-    if (lc.includes("flash-lite") || lc.includes("lite")) {
-      requestedModel = "gemini-3.1-flash-lite";
-    } else if (lc.includes("3.8-flash")) {
-      requestedModel = "gemini-3.8-flash";
-    } else if (lc.includes("flash")) {
-      requestedModel = "gemini-3.8-flash";
-    } else if (rawModel.startsWith("gemini-")) {
-      requestedModel = rawModel;
-    }
+    const candidateModels = [
+      rawModel,
+      "gemini-3.8-flash",
+      "gemini-3.1-flash-lite",
+    ].filter((m, i, a) => m && a.indexOf(m) === i);
 
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
+    const focusLine = focus ? `Pay special attention to this topic or section: "${focus}".` : "";
+
+    // Lean system instruction with prompt caching & minimal token footprint
+    const systemInstruction = `You are an expert study assistant creating high-yield active-recall study flashcards.
+Requirements:
+1. Base flashcards strictly on the provided lecture or study material.
+2. Produce exactly ${cardCount} flashcards.
+3. For each flashcard:
+   - "f": concise question or prompt testing a core concept, definition, mechanism, or relationship.
+   - "b": 1-2 sentence clear answer explanation.
+   - "o": exactly 4 options. The CORRECT answer MUST always be at index 0, followed by 3 plausible distractors.
+${focusLine}`;
+
+    // Highly optimized response schema with compact keys (f, b, o)
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        title: {
+          type: Type.STRING,
+          description: "Short, punchy deck title (max 6 words)",
+        },
+        cards: {
+          type: Type.ARRAY,
+          description: "List of flashcard objects",
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              f: {
+                type: Type.STRING,
+                description: "Front prompt or question",
+              },
+              b: {
+                type: Type.STRING,
+                description: "Back 1-2 sentence answer explanation",
+              },
+              o: {
+                type: Type.ARRAY,
+                description:
+                  "4 options where index 0 is ALWAYS the correct answer, followed by 3 distractors",
+                items: { type: Type.STRING },
+              },
+            },
+            required: ["f", "b", "o"],
+          },
         },
       },
-    });
+      required: ["title", "cards"],
+    };
 
-    const focusLine = focus ? `Pay special attention to this topic/section: "${focus}".` : "";
-
-    const systemInstructions = `You are an expert study assistant helping a student build a high-retention study deck from lecture slides, screenshots, notes, or textbook materials.
-
-Produce:
-1. A short, plain "title" for this deck (max 6 words, based on the actual material).
-2. Exactly ${cardCount} high-yield flashcards testing key definitions, mechanisms, concepts, formulas, and relationships.
-   For each flashcard, provide:
-   - "front": concise question or prompt.
-   - "back": clear, complete-sentence answer explanation (1-3 sentences).
-   - "options": exactly 4 distinct choices (one correct answer and three plausible distractors).
-   - "correctIndex": integer (0, 1, 2, or 3) indicating which option is correct.
-3. 5 multiple-choice quiz questions drawn from the same material, each with "question", 4 "options", and a zero-indexed "correctIndex".
-
-${focusLine}
-
-Rules:
-- Base everything strictly on the provided material. Do not hallucinate unsupported facts.
-- Front questions should be punchy and clear.
-- Distractors in "options" must be plausible and educational, not absurd.
-- Shuffle the correct option position across different cards so correctIndex varies between 0, 1, 2, and 3.
-
-Return ONLY valid JSON matching this exact shape, no markdown fences, no extra commentary:
-{
-  "title": "string",
-  "flashcards": [
-    {
-      "front": "string",
-      "back": "string",
-      "options": ["string", "string", "string", "string"],
-      "correctIndex": 0
-    }
-  ],
-  "quiz": [
-    {
-      "question": "string",
-      "options": ["string", "string", "string", "string"],
-      "correctIndex": 0
-    }
-  ]
-}`;
+    const config = {
+      responseMimeType: "application/json",
+      responseSchema,
+      systemInstruction,
+      thinkingConfig: {
+        thinkingLevel: ThinkingLevel.LOW,
+      },
+    };
 
     let response;
 
     if (isImage) {
-      // Multimodal processing directly with Gemini Vision
       const imagePart = {
         inlineData: {
           data: buffer.toString("base64"),
-          mimeType: mime || "image/png",
+          mimeType: mime || "image/jpeg",
         },
       };
 
-      const prompt = `${systemInstructions}\n\nAnalyze the provided image/screenshot carefully and generate the study deck from all visible slides, diagrams, and text.`;
-      response = await ai.models.generateContent({
-        model: requestedModel,
-        contents: [prompt, imagePart],
-        config: {
-          responseMimeType: "application/json",
-        },
+      const userPrompt =
+        "Analyze this slide or notes image and generate the requested study flashcards.";
+      response = await generateWithFailover({
+        contents: [imagePart, { text: userPrompt }],
+        config,
+        models: candidateModels,
       });
     } else {
-      let text = "";
+      let rawText = "";
 
       if (ext === "pptx" || mime.includes("presentation") || mime.includes("powerpoint")) {
         try {
-          text = await extractTextFromPptx(buffer);
+          rawText = await extractTextFromPptx(buffer);
         } catch (e) {
-          console.error("PPTX error:", e);
+          console.error("PPTX extraction error:", e);
           return Response.json(
-            { error: "Couldn't extract text from that PowerPoint presentation. Try saving as PDF or taking screenshots." },
+            {
+              error:
+                "Couldn't extract text from that PowerPoint presentation. Try saving as PDF or taking screenshots.",
+            },
             { status: 400 }
           );
         }
       } else if (ext === "docx" || mime.includes("wordprocessing")) {
         try {
           const res = await mammoth.extractRawText({ buffer });
-          text = (res.value || "").trim();
+          rawText = (res.value || "").trim();
         } catch (e) {
-          console.error("DOCX error:", e);
+          console.error("DOCX extraction error:", e);
           return Response.json(
-            { error: "Couldn't read that Word document. Try saving as PDF or plain text." },
+            {
+              error: "Couldn't read that Word document. Try saving as PDF or plain text.",
+            },
             { status: 400 }
           );
         }
       } else if (ext === "txt" || ext === "md" || mime.startsWith("text/")) {
-        text = buffer.toString("utf-8").trim();
+        rawText = buffer.toString("utf-8").trim();
       } else {
-        // Default to PDF parsing
         try {
           const parsed = await pdfParse(buffer);
-          text = (parsed.text || "").trim();
+          rawText = (parsed.text || "").trim();
         } catch (e) {
+          console.error("PDF parse error:", e);
           return Response.json(
-            { error: "Couldn't read that PDF. If it's a scanned PDF, try taking a screenshot or image instead!" },
+            {
+              error:
+                "Couldn't read that PDF. If it's a scanned PDF, try taking a screenshot instead!",
+            },
             { status: 400 }
           );
         }
       }
 
-      if (!text || text.length < 30) {
+      if (!rawText || rawText.length < 30) {
         return Response.json(
           {
             error:
-              "Could not find sufficient text in that file. If your document is an image or scan, upload it as a PNG/JPG screenshot!",
+              "Could not find readable text in that file. If your document is scanned or an image, upload it as a PNG/JPG screenshot!",
           },
           { status: 400 }
         );
       }
 
-      const trimmedText = text.slice(0, MAX_CHARS);
-      const prompt = `${systemInstructions}\n\nSOURCE TEXT:\n"""\n${trimmedText}\n"""`;
-      response = await ai.models.generateContent({
-        model: requestedModel,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-        },
+      // Clean headers, footers, page numbers and sample intelligently across the full document
+      const cleaned = cleanExtractedText(rawText);
+      const targetBudgetChars = Math.min(32000, Math.max(8000, Number(cardCount) * 900));
+      const sampledText = sampleDocumentText(cleaned, targetBudgetChars);
+
+      const userPrompt = `SOURCE MATERIAL:\n"""\n${sampledText}\n"""`;
+      response = await generateWithFailover({
+        contents: userPrompt,
+        config,
+        models: candidateModels,
       });
     }
 
@@ -216,43 +395,57 @@ Return ONLY valid JSON matching this exact shape, no markdown fences, no extra c
     } catch {
       const match = raw.match(/\{[\s\S]*\}/);
       if (!match) {
-        return Response.json({ error: "The AI returned an unexpected format. Please try again." }, { status: 502 });
+        return Response.json(
+          { error: "The AI returned an unexpected response format. Please try again." },
+          { status: 502 }
+        );
       }
       parsed = JSON.parse(match[0]);
     }
 
-    if (!Array.isArray(parsed.flashcards) || parsed.flashcards.length === 0) {
-      return Response.json({ error: "No flashcards generated. Try uploading clearer slides or notes." }, { status: 502 });
+    const cardsList = Array.isArray(parsed.cards) ? parsed.cards : parsed.flashcards;
+    if (!Array.isArray(cardsList) || cardsList.length === 0) {
+      return Response.json(
+        { error: "No flashcards generated. Try uploading clearer slides or notes." },
+        { status: 502 }
+      );
     }
 
-    // Ensure all flashcards have options and correctIndex fallback if ever missing
-    const formattedCards = parsed.flashcards.map((c, i) => {
-      let options = Array.isArray(c.options) && c.options.length >= 2 ? c.options : null;
-      let correctIndex = typeof c.correctIndex === "number" ? c.correctIndex : 0;
-
-      if (!options) {
-        options = [c.back, "Not mentioned in source", "Opposite is true", "Inconclusive evidence"];
-        correctIndex = 0;
-      }
+    // Format cards and shuffle options in code to avoid LLM position bias and save tokens
+    const formattedCards = cardsList.map((c, i) => {
+      const front = c.f || c.front || `Card ${i + 1}`;
+      const back = c.b || c.back || "";
+      const rawOptions = c.o || c.options || [back];
+      const { options, correctIndex } = shuffleOptions(rawOptions);
 
       return {
-        front: c.front,
-        back: c.back,
+        front,
+        back,
         options,
         correctIndex,
       };
     });
+
+    // Synthesize the 5-question quiz client/server-side from the flashcards (saving ~350+ LLM output tokens)
+    const quizCandidates = [...formattedCards].sort(() => 0.5 - Math.random());
+    const quiz = quizCandidates.slice(0, Math.min(5, quizCandidates.length)).map((c, i) => ({
+      id: `q${i}`,
+      question: c.front,
+      options: c.options,
+      correctIndex: c.correctIndex,
+    }));
 
     const fallbackTitle = filename.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
 
     return Response.json({
       title: parsed.title || fallbackTitle || "Study Deck",
       flashcards: formattedCards,
-      quiz: Array.isArray(parsed.quiz) ? parsed.quiz : [],
+      quiz,
     });
   } catch (err) {
     console.error("API generate error:", err);
-    const errorMsg = err?.message || "Something went wrong generating the deck. Please try again.";
+    const errorMsg =
+      err?.message || "Something went wrong generating the deck. Please try again.";
     return Response.json({ error: errorMsg }, { status: 500 });
   }
 }
