@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 import JSZip from "jszip";
@@ -65,24 +65,25 @@ export async function POST(req) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const rawModel = (process.env.GEMINI_MODEL || "gemini-3.6-flash-lite").trim();
-    // Map friendly names to real API model IDs
-    // gemini-3.6-flash is the current recommended model
+    const rawModel = (process.env.GEMINI_MODEL || "gemini-3.8-flash").trim();
     const lc = rawModel.toLowerCase().replace(/\s+/g, "-");
-    let requestedModel;
-    if (lc.includes("flash-lite")) {
-      requestedModel = "gemini-3.6-flash-lite";
+    let requestedModel = "gemini-3.8-flash";
+    if (lc.includes("flash-lite") || lc.includes("lite")) {
+      requestedModel = "gemini-3.1-flash-lite";
+    } else if (lc.includes("3.8-flash")) {
+      requestedModel = "gemini-3.8-flash";
     } else if (lc.includes("flash")) {
-      requestedModel = "gemini-3.6-flash";
-    } else {
-      requestedModel = rawModel.startsWith("gemini-") ? rawModel : `gemini-${rawModel}`;
+      requestedModel = "gemini-3.8-flash";
+    } else if (rawModel.startsWith("gemini-")) {
+      requestedModel = rawModel;
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: requestedModel,
-      generationConfig: {
-        responseMimeType: "application/json",
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
       },
     });
 
@@ -128,7 +129,7 @@ Return ONLY valid JSON matching this exact shape, no markdown fences, no extra c
   ]
 }`;
 
-    let result;
+    let response;
 
     if (isImage) {
       // Multimodal processing directly with Gemini Vision
@@ -140,7 +141,13 @@ Return ONLY valid JSON matching this exact shape, no markdown fences, no extra c
       };
 
       const prompt = `${systemInstructions}\n\nAnalyze the provided image/screenshot carefully and generate the study deck from all visible slides, diagrams, and text.`;
-      result = await model.generateContent([prompt, imagePart]);
+      response = await ai.models.generateContent({
+        model: requestedModel,
+        contents: [prompt, imagePart],
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
     } else {
       let text = "";
 
@@ -192,10 +199,16 @@ Return ONLY valid JSON matching this exact shape, no markdown fences, no extra c
 
       const trimmedText = text.slice(0, MAX_CHARS);
       const prompt = `${systemInstructions}\n\nSOURCE TEXT:\n"""\n${trimmedText}\n"""`;
-      result = await model.generateContent(prompt);
+      response = await ai.models.generateContent({
+        model: requestedModel,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
     }
 
-    const raw = result.response.text();
+    const raw = response.text || "";
 
     let parsed;
     try {

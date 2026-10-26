@@ -1,0 +1,7 @@
+{
+  "name": "Maia Flashcards",
+  "description": "Transform lecture slides and textbook PDFs into active-recall flashcards and quizzes in seconds. Study with spaced repetition and cozy encouragement from Maia.",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
